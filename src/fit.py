@@ -236,7 +236,7 @@ def fit_sum_multi_sine(t, y, yerr,max_n_fit, weights, Omega_0, gamma, rsb=True,g
 
     return (weight_fit, Omega_fit, weight_error, Omega_error, gamma_fit, res)
 
-def fit_sum_multi_sine_offset(t, y, max_n_fit, weights, Omega_0, gamma,offset=0.0,\
+def fit_sum_multi_sine_offset(t, y, yerr, max_n_fit, weights, Omega_0, gamma,offset=0.0,\
                                    rsb=True,gamma_fixed=False,\
                        customized_bound_population=None):
     '''
@@ -289,7 +289,7 @@ def fit_sum_multi_sine_offset(t, y, max_n_fit, weights, Omega_0, gamma,offset=0.
         bounds = (lower_bounds, upper_bounds)
 
         p0 = np.concatenate((weights, Omega_0, gamma), axis=None)
-        res = fit_leastsq(p0, t, y, None, sum_multi_sine_offset, [offset,rsb], bounds=bounds)
+        res = fit_leastsq(p0, t, y, yerr, sum_multi_sine_offset, [offset,rsb], bounds=bounds)
         gamma_fit = res[0][-1]
         weight_fit = res[0][:max_n_fit]
         weight_fit[-1] = 1 - np.sum(weight_fit[:-1])
