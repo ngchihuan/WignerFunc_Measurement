@@ -19,7 +19,10 @@ def check_data_format(data):
         if (np.min(data['y']) < 0 or np.max(data['y'])>1.0):
             raise DataFormatError("y is out of range (0,1)")
 
-
+def print_debug():
+    debug_msg = 'debug'
+    return  debug_msg
+    
 
 
 def check_structure(struct, conf):
