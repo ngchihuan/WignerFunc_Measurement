@@ -8,53 +8,6 @@ from scipy.optimize import curve_fit
 import math
 
 
-def sine_no_offset(x, p, arg1):
-    [a, b, phase] = p
-    return a*np.sin(b*x+phase)
-
-
-def sinesquare_no_offset(x, p, arg1):
-    [a, b, phase] = p
-    return a*(np.sin(2*np.pi/(b*4)*x+phase))**2
-
-
-def fit_sinesquare_no_offset(t, y, yerr, p, arg1):
-    p0 = p
-    res = fit_leastsq(p0, t, y, None, sinesquare_no_offset, 0)
-    p_fit = res[0]
-    p_fit_err = res[-1]
-    return p_fit, p_fit_err
-
-
-def fit_sine_no_offset(t, y, yerr, p, arg1):
-    p0 = p
-    res = fit_leastsq(p0, t, y, None, sine_no_offset, 0)
-    p_fit = res[0]
-    p_fit_err = res[-1]
-    return p_fit, p_fit_err
-
-
-def fit_squeezed_vac(t, y, yerr, p0, ntotal, gamma, bounds=[-np.inf, np.inf]):
-    bounds = [0, [1, np.inf, np.inf]]
-    res = fit_leastsq(p0, t, y, yerr, squeezed_vac_func,
-                      [ntotal, gamma], bounds=bounds)
-    return res
-
-
-def squeezed_vac_func(x, p0, arg1=[100, 7E-5]):
-    # Should fit with gamma and n_total as fitting parameters. will give inf convariance matrix
-    # It is recommended to use large n_total. otherwise, Pe(t=0) != 0
-    [a, r, Tpi] = p0
-    [n_total, gamma] = arg1
-    evenlist = []
-    for n in range(0, n_total):
-        if n % 2 == 0:
-            evenlist.append(n)
-    sqz_array = np.array(
-        [np.tanh(r) ** (n) / np.cosh(r) * (math.factorial(n)) / ((math.factorial(int(n / 2))) ** 2 * 2 ** (n))
-         * np.cos(np.sqrt(n + 1) * x * np.pi / Tpi) * np.exp(- np.sqrt(n + 1) * gamma * x) for n in evenlist])
-
-    return (a / 2.0) * (1 - np.sum(sqz_array, axis=0))
 
 
 def sum_multi_sine(t, p, rsb=True):
@@ -207,7 +160,7 @@ def fit_leastsq(p0, x, y, yerr, function, arg1, bounds=(-np.inf, np.inf)):
     return pfit, pcov, redchi, perr
 
 # REFACTORED FIT FUNC
-def fit_sum_multi_sine_offset(t, y, yerr, max_n_fit, weights, Omega_0, gamma, offset=0.0,
+def fit_sum_multi_sine_offset(t, y, yerr, weights, Omega_0, gamma, offset=0.0,
                               rsb=True, gamma_fixed=False,
                               customized_bound_population=None, debug=True):
     '''
@@ -219,23 +172,33 @@ def fit_sum_multi_sine_offset(t, y, yerr, max_n_fit, weights, Omega_0, gamma, of
 
         t: x axis of data
         y: y axis of data
-        max_n_fit: maximum number of the elements of the sum
         Omega_0: Nominal Angular freq
         gamma: exponential damping. Gamma_n=gamma*(n+1)**0.7
-    Returns: A tuple of (weight_fit,Omega_fit,weight_error,Omega_error,res)
+    Returns: A dict fit_result = {'weight fit': weight_fit, 'weight err': weight_error, 'Omega_fit': Omega_fit, 'Pi time fit': np.round(tpi_fit, 3),
+                  'Omega_error': Omega_error, 'gamma_fit': gamma_fit, 'fit function': fit_func, 'reduced_chi square': redchi
+                  }
         weight_fit: returned fit of weights
         Omega_fit: returned fit of Omega
         weight_error: error of fitted weights
         Omega_error: error of fitted Omega
-        res: retunred of fitleast_sq
+        fit function: the fit function that is used to fit the data
+        reduced_chi_square: the reduced chi square of the fit obtained by np.sum(((y - yfit) ** 2) / yerr ** 2) / (N - n)
 
 
     '''
     # weight=np.ones(max_n_fit)/max_n_fit
 
+
     upper_bounds = []
     lower_bounds = []
     fit_func = sum_multi_sine_offset
+    try:
+        weights = list(weights)
+        max_n_fit = np.size(weights)
+    except TypeError:
+        print('weights must be a list')
+    
+    
     if gamma_fixed == False:
 
         # Set up bounds
@@ -268,6 +231,8 @@ def fit_sum_multi_sine_offset(t, y, yerr, max_n_fit, weights, Omega_0, gamma, of
         Omega_fit = res[0][-2]
         weight_error = res[-1][:max_n_fit]
         Omega_error = res[-1][-2]
+        tpi_fit = np.pi / Omega_fit
+        redchi = res[-2]
     else:
         # Set up bounds
         if customized_bound_population == None:
@@ -289,22 +254,23 @@ def fit_sum_multi_sine_offset(t, y, yerr, max_n_fit, weights, Omega_0, gamma, of
 
         p0 = np.concatenate((weights, Omega_0), axis=None)
 
-        # extract fitting results
+    # extract fitting results
         res = fit_leastsq(p0, t, y, None, fit_func, [
-                          offset, rsb], bounds=bounds)
+                            offset, rsb], bounds=bounds)
         gamma_fit = gamma
         weight_fit = res[0][:max_n_fit]
         weight_fit[-1] = 1 - np.sum(weight_fit[:-1])
         Omega_fit = res[0][-1]
-        tpi_fit = np.pi / Omega_fit
+        
         weight_error = res[-1][:max_n_fit]
         Omega_error = res[-1][-1]
+        tpi_fit = np.pi / Omega_fit
         redchi = res[-2]
 
     if debug:
         print('upper_bounds is ', upper_bounds)
         print('lower_bounds is ', lower_bounds)
-        print('Omega fit ', np.round(Omega_fit, 3))
+        print('Omega fit ', np.round(Omega_fit, 6))
         print('gamma fit ', gamma_fit)
         print('Error Omega', np.round(Omega_error, 3))
         print('Pi time fit', np.round(tpi_fit, 3))
