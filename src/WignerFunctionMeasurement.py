@@ -1,4 +1,5 @@
 from os import error
+from shutil import Error
 import numpy as np
 import fit
 
@@ -41,24 +42,25 @@ def check_structure(struct, conf):
         return False
 
 
-def parity_calculate(data):
+def extract_pop(data):
+    res= None
     try:
-        check_data_format(data)
+        #check_data_format(data)
         x = data['x']
         y = data['y']
         yerr = data['yerr']
-        res = fit.fit_sum_multi_sine_offset_deve(x, y, max_n_fit, weights, Omega_0, gamma, offset=offset, rsb=True,\
-                                         gamma_fixed=False, \
-                                   customized_bound_population=None)
+        res = fit.fit_sum_multi_sine_offset(x, y, weights, Omega_0, gamma, offset=offset, rsb=True,gamma_fixed=False,customized_bound_population=None)
+
     except DataFormatError as err:
         print('Error! {0}'.format(err))
-    res = fit.fit_sum_multi_sine_offset_deve(x, y, max_n_fit, weights, Omega_0, gamma, offset=offset, rsb=True,\
-                                         gamma_fixed=False, \
-                                   customized_bound_population=None)
+    
+    except RuntimeError:
+        print('Could not find the optimal fitting parameters')
 
-    parity = 0
+    except Error as e:
+        print(e)
 
-    return parity
+    return res
 
 class WignerFunc_Measurement():
     def __init__(self) -> None:
@@ -81,22 +83,39 @@ class WignerFunc_Measurement():
 
 class SideBandMeasurement():
     def __init__(self,fname) -> None:
-        self.fname = self.set_fname(fname)
-        self.xy = None
+        self.fname = fname
+        self.xy = dict((el,[]) for el in ['x','y','yerr'])
         self.plot = None
         self.parity = None
 
-    def set_fname(self,fname):
-        self.fname = fname
+        self.extract_xy()
+
+
 
     def extract_xy(self):
         '''
         Extract xy data from the data files 
         '''
-        self.xy = None
+        try:
+            self.xy['x'], self.xy['y'], self.xy['yerr'] = tuple(np.genfromtxt(self.fname))
+        except OSError as err:
+            print('file \'%s\' is not found' %(self.fname))
+            raise OSError
+        except ValueError:
+            print('data file has wrong data format')
+            
 
     def eval_parity(self):
-        parity_calculate(self.xy)
+        res = extract_pop(self.xy)
+        self.weight_fit = res['weigh fit']
+        self.parity = 0 
+        for i,j in enumerate(self.weight_fit):
+            if i%2 == 0:
+                self.parity += j*1 
+            else:
+                self.parity += j*(-1)
+
+        #use map and filter to do it in a better way???
 
     def plotxy(self):
         self.plot = None
