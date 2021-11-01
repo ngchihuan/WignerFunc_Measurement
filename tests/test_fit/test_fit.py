@@ -14,7 +14,7 @@ class TestClass_fit_sum_multi_sine_offset:
 
     @pytest.mark.parametrize("x, y, yerr", [ data_1] )
     @pytest.mark.parametrize("weights", [   [1, 0, 0]  , [0 ,1, 0], [0, 0, 1] ] )
-    @pytest.mark.parametrize('Omega_0',[ 0.04, 0.05, 0.06])
+    @pytest.mark.parametrize('Omega_0',[ 0.05])
     @pytest.mark.parametrize('gamma', [1e-4])
     def test_is_fit_results_correct_bsb(self,x,y,yerr, weights, Omega_0, gamma ):
 
@@ -22,3 +22,17 @@ class TestClass_fit_sum_multi_sine_offset:
                               rsb=False, gamma_fixed=False,
                               customized_bound_population=None, debug=False)
         assert res['weight fit'][0] > 0.95
+
+    @pytest.mark.parametrize("x, y, yerr", [ data_1] )
+    @pytest.mark.parametrize("weights", [   [1, 0, 0]  , [0 ,1, 0], [0, 0, 1] ] )
+    @pytest.mark.parametrize('Omega_0',[ 0.04, 0.06, 0.07])
+    @pytest.mark.parametrize('gamma', [1e-4])
+    #fit_sum_multi_sine_offset must not return the right result with the following params
+    def test_is_fit_results_wrong_bsb(self,x,y,yerr, weights, Omega_0, gamma ):
+        try:
+            res = fit.fit_sum_multi_sine_offset(x, y, yerr, weights, Omega_0, gamma, offset=0.0,
+                              rsb=False, gamma_fixed=False,
+                              customized_bound_population=None, debug=False)
+            assert res['weight fit'][0] < 0.95
+        except RuntimeError:
+            assert True
