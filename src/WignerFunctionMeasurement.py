@@ -2,6 +2,7 @@ from os import error
 from shutil import Error
 import numpy as np
 import fit
+import simple_read_data
 
 class DataFormatError(Exception):
     pass
@@ -42,25 +43,7 @@ def check_structure(struct, conf):
         return False
 
 
-def extract_pop(data):
-    res= None
-    try:
-        #check_data_format(data)
-        x = data['x']
-        y = data['y']
-        yerr = data['yerr']
-        res = fit.fit_sum_multi_sine_offset(x, y, weights, Omega_0, gamma, offset=offset, rsb=True,gamma_fixed=False,customized_bound_population=None)
 
-    except DataFormatError as err:
-        print('Error! {0}'.format(err))
-    
-    except RuntimeError:
-        print('Could not find the optimal fitting parameters')
-
-    except Error as e:
-        print(e)
-
-    return res
 
 class WignerFunc_Measurement():
     def __init__(self) -> None:
@@ -82,39 +65,90 @@ class WignerFunc_Measurement():
 
 
 class SideBandMeasurement():
-    def __init__(self,fname) -> None:
+    def __init__(self,fname,raw = False ) -> None:
         self.fname = fname
         self.xy = dict((el,[]) for el in ['x','y','yerr'])
         self.plot = None
         self.parity = None
+        self.raw = raw
 
         self.extract_xy()
+        self.weight = [1, 0, 0]
+        self.Omega_0 = 0.05
+        self.gamma = 1e-4
+        self.offset = 0.0
+
+    def set_Omega(self,omega):
+        try:
+            self.Omega_0 = float(omega)
+        except ValueError:
+            print('Rabi freq must a nummber')
+            raise ValueError
 
 
+
+    def set_weight(self,weight):
+        try:
+            self.weight = [float(i) for i in weight]
+        except TypeError as err:
+            print(err)
+            raise TypeError
+
+        except ValueError:
+            print('the given weight does not contain float numbers')
+            raise ValueError
+
+        return None
 
     def extract_xy(self):
         '''
         Extract xy data from the data files 
         '''
-        try:
-            self.xy['x'], self.xy['y'], self.xy['yerr'] = tuple(np.genfromtxt(self.fname))
-        except OSError as err:
-            print('file \'%s\' is not found' %(self.fname))
-            raise OSError
-        except ValueError:
-            print('data file has wrong data format')
+        if self.raw== True:
+            try:
+                (self.xy['x'], self.xy['y'], self.xy['yerr'],_,_) = simple_read_data.get_x_y(self.fname)
+            except Error as err:
+                print('There are some errors ',err)
+        else:
+            try:
+                self.xy['x'], self.xy['y'], self.xy['yerr'] = tuple(np.genfromtxt(self.fname))
+            except OSError as err:
+                print('file \'%s\' is not found' %(self.fname))
+                raise OSError
+            except ValueError:
+                print('data file has wrong data format')
             
+    def extract_pop(self):
+        res= None
+        try:
+            #check_data_format(data)
+            x = self.xy['x']
+            y = self.xy['y']
+            yerr = self.xy['yerr']
+            res = fit.fit_sum_multi_sine_offset(x, y, yerr, self.weight, self.Omega_0, self.gamma, offset = self.offset, rsb=False\
+                ,gamma_fixed=False,customized_bound_population=None)
+
+        except DataFormatError as err:
+            print('Error! {0}'.format(err))
+        
+        except RuntimeError:
+            print('Could not find the optimal fitting parameters')
+
+        except Error as e:
+            print(e)
+
+        return res
 
     def eval_parity(self):
-        res = extract_pop(self.xy)
-        self.weight_fit = res['weigh fit']
+        res = self.extract_pop()
+        self.weight_fit = res['weight fit']
         self.parity = 0 
         for i,j in enumerate(self.weight_fit):
             if i%2 == 0:
                 self.parity += j*1 
             else:
                 self.parity += j*(-1)
-
+        return self.parity
         #use map and filter to do it in a better way???
 
     def plotxy(self):

@@ -10,6 +10,7 @@ class Test_Wigner():
     def test_debugPrint(self,fname):
         assert WFM.print_debug() == 'debug'
 
+    
 
 class Test_SideBandMeasurement():
     @pytest.mark.parametrize("fname",[fname_nonexist])
@@ -34,7 +35,16 @@ class Test_SideBandMeasurement():
     def test_parity_calculate_correct(self,fname, parity):
         sbm = WFM.SideBandMeasurement(fname)
         res = sbm.eval_parity()
-        assert res>.9
+        assert res>0.9
 
-
-    
+    @pytest.mark.parametrize("fname",[fname_1])
+    @pytest.mark.parametrize("weight",[ {"a":1}, 2, ["a", "b"]])
+    def test_setweight_bad_input_given(self, fname, weight):
+        try:
+            sbm = WFM.SideBandMeasurement(fname)
+            sbm.set_weight(weight)
+            assert False
+        except TypeError:
+            assert True
+        except ValueError:
+            assert True
