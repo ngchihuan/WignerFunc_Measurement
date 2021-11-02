@@ -117,7 +117,7 @@ class SideBandMeasurement():
                 raise OSError
             except ValueError:
                 print('data file has wrong data format')
-            
+        
     def extract_pop(self):
         res= None
         try:
@@ -155,8 +155,11 @@ class SideBandMeasurement():
         self.plot = None
 
 if __name__ == '__main__':
+    pass
     #data = [1,2,3,4]
-    conf = {'x': [], 'y' : [], 'yerr' : [] }
-    data = {'x': [1,2,3], 'y' : [1, 2, 3], 'yerr' : [1,2,3] }
+    #conf = {'x': [], 'y' : [], 'yerr' : [] }
+    #data = {'x': [1,2,3], 'y' : [1, 2, 3], 'yerr' : [1,2,3] }
     #print(check_structure(data,conf) )
-    parity_calculate(data)
+    #parity_calculate(data)
+    fname2 = 'test_data/r1op bsb delay scan after sbc Xcohex 50us phase 0'
+    sb1 = SideBandMeasurement(fname2,raw=True)

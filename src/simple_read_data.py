@@ -15,11 +15,13 @@ def read_file2(filename):
         for row in csv.reader(file):
             data = []
             extra = []
+            #print(row)
+            
             for item in row:
                 try:
                     data.append(float(item))
                 except:
-                    extra.append(ast.literal_eval(item))
+                    extra.append(ast.literal_eval(item))                                        
             d.append(data)
             t.append(extra[0])
             h.append(extra[1])
@@ -52,6 +54,7 @@ def process_raw(raw):
 
 
 def get_x_y(filename):
+    
     data, hist, raw, timestamp = read_file2(filename)
     raw = process_raw(raw)
     nexp = get_nexp(raw)
@@ -68,8 +71,8 @@ def get_x_y(filename):
     # Counter 'c' mean is [14]
     print('nexp ',nexp)
     nexp=nexp[0]
-    err1 = sqrt(y1 * (1.0 - y1) / nexp)
-    err2 = sqrt(y2 * (1.0 - y2) / nexp)
+    err1 = np.sqrt(y1 * (1.0 - y1) / nexp)
+    err2 = np.sqrt(y2 * (1.0 - y2) / nexp)
     x = x[::-1]
     y1 = y1[::-1]
     err1 = err1[::-1]
