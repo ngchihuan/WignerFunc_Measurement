@@ -75,7 +75,7 @@ class SideBandMeasurement():
         self.extract_xy()
         self.weight = [1, 0, 0]
         self.Omega_0 = 0.05
-        self.gamma = 1e-4
+        self.gamma = 7e-4
         self.offset = 0.0
 
     def set_Omega(self,omega):
@@ -85,6 +85,12 @@ class SideBandMeasurement():
             print('Rabi freq must a nummber')
             raise ValueError
 
+    def set_gamma(self,gamma):
+        try:
+            self.gamma = float(gamma)
+        except ValueError:
+            print('gamma must a nummber')
+            raise ValueError        
 
 
     def set_weight(self,weight):
