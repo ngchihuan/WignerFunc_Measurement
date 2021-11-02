@@ -5,6 +5,10 @@ import WignerFunctionMeasurement as WFM
 fname_1 = '../test_data/r1op bsb delay scan after sbc_processed'
 
 fname_nonexist = 'nonexist'
+
+# unprocessed data saved by the iongui program used in Dzmitry's lab.
+fname_raw_1 = '../test_data/r1op bsb delay scan after sbc Xcohex 50us phase 0'
+
 class Test_Wigner():
     @pytest.mark.parametrize("fname",[fname_1])
     def test_debugPrint(self,fname):
@@ -29,6 +33,15 @@ class Test_SideBandMeasurement():
             assert True
         except OSError:
             assert False
+
+    @pytest.mark.parametrize("fname", [fname_raw_1])
+    def test_is_rawdata_isread_correct(self,fname):
+        try:
+            sb1 = WFM.SideBandMeasurement(fname,raw = True)
+            assert bool(sb1.xy)
+        except:
+            assert False
+
 
     @pytest.mark.parametrize("fname",[fname_1])
     @pytest.mark.parametrize("parity",[1])
