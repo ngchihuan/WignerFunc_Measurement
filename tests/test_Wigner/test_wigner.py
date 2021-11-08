@@ -3,7 +3,7 @@ import pytest
 import WignerFunctionMeasurement as WFM
 
 fname_1 = '../test_data/r1op bsb delay scan after sbc_processed'
-
+fpath_1 = '../test_data'
 fname_nonexist = 'nonexist'
 
 # unprocessed data saved by the iongui program used in Dzmitry's lab.
@@ -14,7 +14,31 @@ class Test_Wigner():
     def test_debugPrint(self,fname):
         assert WFM.print_debug() == 'debug'
 
-    
+    @pytest.mark.parametrize("fpath",[fname_nonexist,1])
+    def test_is_wrong_path_caught(self,fpath):
+        try:
+            sb1 = WFM.WignerFunc_Measurement(fpath)
+            sb1.set_path(fpath)
+            assert False
+        except:
+            assert True
+
+    @pytest.mark.parametrize("fpath",[fpath_1,'.'])
+    def test_noerror_if_right_path_isgiven(self,fpath):
+        try:
+            sb1 = WFM.WignerFunc_Measurement(fpath)
+            sb1.set_path(fpath)
+            assert True
+        except:
+            assert False
+    @pytest.mark.parametrize("fpath",[fpath_1])
+    def test_list_allfiles_noerr(self,fpath):
+        try:
+            sb1 = WFM.WignerFunc_Measurement(fpath)
+            sb1.list_all_files()
+            assert True
+        except:
+            assert False
 
 class Test_SideBandMeasurement():
     @pytest.mark.parametrize("fname",[fname_nonexist])
