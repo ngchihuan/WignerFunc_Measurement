@@ -1,10 +1,16 @@
-from os import error
-from shutil import Error
+import os
+from os.path import join, isfile
+from sys import exec_prefix
 import numpy as np
 import fit
 import simple_read_data
 
+np.seterr(all='raise')
+
 class DataFormatError(Exception):
+    pass
+
+class WrongPathFormat(Exception):
     pass
 
 def check_data_format(data):
@@ -46,37 +52,62 @@ def check_structure(struct, conf):
 
 
 class WignerFunc_Measurement():
-    def __init__(self) -> None:
-        self.Sbs=[]
-        pass
+    def __init__(self,fpath) -> None:
+        self.sb_list={} #dictionary that stores sb measurement
+     
+        self.set_path(fpath)
+        self.list_all_files()
 
-    def set_path(self,fpath):
-        self.path = fpath
+
+    def set_path(self,fpath) -> None:
+        try:
+            os.listdir(fpath)
+            self.fpath = fpath
+        except (NotADirectoryError, FileNotFoundError):
+            print('the given path is not a directory')
+            raise WrongPathFormat
+        
 
     def list_all_files(self):
-        self.files = []
-        pass
+        self.files = [f for f in os.listdir(self.fpath) if isfile(join(self.fpath, f)) and os.path.splitext(join(self.fpath,f))[1] in ['','.dat'] ]
+        self.fullpath_files = sorted( [join(self.fpath,f)  for f in os.listdir(self.fpath) if isfile(join(self.fpath, f)) and os.path.splitext(join(self.fpath,f))[1]=='' ] )
+        if self.files == []:
+            print('the directory is empty')
+        return self.files
 
-    def SBM_gen(self):
-        for f in  self.files:
-            print (f)
-            self.sb = SideBandMeasurement(f) 
-            self.SBs.append(self.sb)
+    def setup_sbs(self):
+        for id, fname in enumerate(self.fullpath_files):
+            sbs = SideBandMeasurement(fname,raw = False)
+            sbs.eval_parity()
+            self.sb_list[str(id)] = sbs
+        
+
+    def get_files(self):
+        return self.files
+
+    def report(self):
+        print('Report summary \n')
+        for id,sb in self.sb_list.items():
+            print(id,sb.fname, sb.parity)
+
 
 
 class SideBandMeasurement():
     def __init__(self,fname,raw = False ) -> None:
         self.fname = fname
+        self.check_file_exist()
         self.xy = dict((el,[]) for el in ['x','y','yerr'])
         self.plot = None
         self.parity = None
         self.raw = raw
-
-        self.extract_xy()
         self.weight = [1, 0, 0]
         self.Omega_0 = 0.05
         self.gamma = 7e-4
         self.offset = 0.0
+        self.err_log=[]
+
+    def log_err(self,errors):
+        self.err_log.append(errors)
 
     def set_Omega(self,omega):
         try:
@@ -93,18 +124,27 @@ class SideBandMeasurement():
             raise ValueError        
 
 
-    def set_weight(self,weight):
+    def set_weight(self,weight) -> None:
         try:
             self.weight = [float(i) for i in weight]
         except TypeError as err:
             print(err)
+            self.log_err(err)
             raise TypeError
 
-        except ValueError:
+        except ValueError as err:
             print('the given weight does not contain float numbers')
+            self.log_err(err)
             raise ValueError
 
         return None
+
+    def check_file_exist(self):
+        try:
+            np.genfromtxt(self.fname)
+        except OSError as err:
+            print('file \'%s\' is not found' %(self.fname))
+            raise OSError
 
     def extract_xy(self):
         '''
@@ -113,59 +153,61 @@ class SideBandMeasurement():
         if self.raw== True:
             try:
                 (self.xy['x'], self.xy['y'], self.xy['yerr'],_,_) = simple_read_data.get_x_y(self.fname)
-            except Error as err:
+            except Exception as err:
                 print('There are some errors ',err)
+                self.log_err.append(err)
         else:
             try:
                 self.xy['x'], self.xy['y'], self.xy['yerr'] = tuple(np.genfromtxt(self.fname))
+
             except OSError as err:
                 print('file \'%s\' is not found' %(self.fname))
                 raise OSError
-            except ValueError:
+
+            except ValueError as err:
                 print('data file has wrong data format')
+                raise ValueError
         
     def extract_pop(self):
-        res= None
+
         try:
+            if not self.xy['x']:
+                self.extract_xy()
             #check_data_format(data)
             x = self.xy['x']
             y = self.xy['y']
             yerr = self.xy['yerr']
-            res = fit.fit_sum_multi_sine_offset(x, y, yerr, self.weight, self.Omega_0, self.gamma, offset = self.offset, rsb=False\
+            self.fit_res = fit.fit_sum_multi_sine_offset(x, y, yerr, self.weight, self.Omega_0, self.gamma, offset = self.offset, rsb=False\
                 ,gamma_fixed=False,customized_bound_population=None)
+            return self.fit_res
+        except Exception as err:
+            print(err)
+            raise err
 
-        except DataFormatError as err:
-            print('Error! {0}'.format(err))
         
-        except RuntimeError:
-            print('Could not find the optimal fitting parameters')
-
-        except Error as e:
-            print(e)
-
-        return res
 
     def eval_parity(self):
-        res = self.extract_pop()
-        self.weight_fit = res['weight fit']
-        self.parity = 0 
-        for i,j in enumerate(self.weight_fit):
-            if i%2 == 0:
-                self.parity += j*1 
-            else:
-                self.parity += j*(-1)
-        return self.parity
+        try:
+            res = self.extract_pop()
+            self.weight_fit = res['weight fit']
+            self.parity = 0 
+            for i,j in enumerate(self.weight_fit):
+                if i%2 == 0:
+                    self.parity += j*1 
+                else:
+                    self.parity += j*(-1)
+            return self.parity
+        except Exception as err:
+            print(err)
+            self.log_err(err)
         #use map and filter to do it in a better way???
 
     def plotxy(self):
         self.plot = None
 
+
 if __name__ == '__main__':
-    pass
-    #data = [1,2,3,4]
-    #conf = {'x': [], 'y' : [], 'yerr' : [] }
-    #data = {'x': [1,2,3], 'y' : [1, 2, 3], 'yerr' : [1,2,3] }
-    #print(check_structure(data,conf) )
-    #parity_calculate(data)
-    fname2 = 'test_data/r1op bsb delay scan after sbc Xcohex 50us phase 0'
-    sb1 = SideBandMeasurement(fname2,raw=True)
+    fpath ='../tests/test_data'
+    wfm1 = WignerFunc_Measurement(fpath)
+    wfm1.setup_sbs()
+    wfm1.report()
