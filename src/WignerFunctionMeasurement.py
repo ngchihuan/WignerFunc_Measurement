@@ -4,9 +4,11 @@ from sys import exec_prefix
 import numpy as np
 import fit
 import simple_read_data
+from tabulate import tabulate
+import logging
 
 np.seterr(all='raise')
-
+logging.basicConfig(level=logging.WARNING)
 class DataFormatError(Exception):
     pass
 
@@ -58,13 +60,14 @@ class WignerFunc_Measurement():
         self.set_path(fpath)
         self.list_all_files()
 
+        self.logger = logging.getLogger(__name__)
 
     def set_path(self,fpath) -> None:
         try:
             os.listdir(fpath)
             self.fpath = fpath
         except (NotADirectoryError, FileNotFoundError):
-            print('the given path is not a directory')
+            self.logger.error('The given path is not a directory')
             raise WrongPathFormat
         
 
@@ -72,7 +75,7 @@ class WignerFunc_Measurement():
         self.files = [f for f in os.listdir(self.fpath) if isfile(join(self.fpath, f)) and os.path.splitext(join(self.fpath,f))[1] in ['','.dat'] ]
         self.fullpath_files = sorted( [join(self.fpath,f)  for f in os.listdir(self.fpath) if isfile(join(self.fpath, f)) and os.path.splitext(join(self.fpath,f))[1]=='' ] )
         if self.files == []:
-            print('the directory is empty')
+            self.logger.warning('The directory is empty')
         return self.files
 
     def setup_sbs(self):
@@ -85,12 +88,34 @@ class WignerFunc_Measurement():
     def get_files(self):
         return self.files
 
-    def report(self):
+    def print_report(self):
         print('Report summary \n')
-        for id,sb in self.sb_list.items():
-            print(id,sb.fname, sb.parity)
+        t=[[key,sb.fname, sb.parity, sb.err_log] for key,sb in self.sb_list.items()]
 
+        print(tabulate(t, headers=['id', 'filepath', 'parity','Errors']))
 
+    def refit(self,id,weights=[],omega=None,gamma=None):
+        '''
+        Refit a sideband measurement using new weights, omega and gamma.
+        '''
+        if (id >= len(self.sb_list.keys()) ):
+            print('id is out of range')
+            return
+        else:
+            sb_target = self.sb_list[str(id)]
+            print(f'Refitting Sideband measurement {sb_target.fname}')
+            if omega!= None:
+                sb_target.set_Omega(omega)
+            if len(weights) != 0:
+                self.logger.debug('fit with new weights')
+                sb_target.set_weight(weights)
+            if gamma!= None:
+                sb_target.set_gamma(gamma)
+            sb_target.eval_parity()
+            
+
+    def show_errors(self):
+        pass
 
 class SideBandMeasurement():
     def __init__(self,fname,raw = False ) -> None:
@@ -105,9 +130,13 @@ class SideBandMeasurement():
         self.gamma = 7e-4
         self.offset = 0.0
         self.err_log=[]
+        self.logger= logging.getLogger(__name__)
 
     def log_err(self,errors):
         self.err_log.append(errors)
+
+    def reset_log_err(self):
+        self.err_log=[]
 
     def set_Omega(self,omega):
         try:
@@ -125,16 +154,15 @@ class SideBandMeasurement():
 
 
     def set_weight(self,weight) -> None:
+        self.logger.debug(f'Set weight when fitting sb {self.fname}')
         try:
             self.weight = [float(i) for i in weight]
         except TypeError as err:
-            print(err)
-            self.log_err(err)
+            self.log_err('Set weight error')
             raise TypeError
 
         except ValueError as err:
-            print('the given weight does not contain float numbers')
-            self.log_err(err)
+            self.log_err('Set weight error')
             raise ValueError
 
         return None
@@ -154,24 +182,23 @@ class SideBandMeasurement():
             try:
                 (self.xy['x'], self.xy['y'], self.xy['yerr'],_,_) = simple_read_data.get_x_y(self.fname)
             except Exception as err:
-                print('There are some errors ',err)
-                self.log_err.append(err)
+                self.log_err('Extract_data err')
         else:
             try:
                 self.xy['x'], self.xy['y'], self.xy['yerr'] = tuple(np.genfromtxt(self.fname))
 
             except OSError as err:
-                print('file \'%s\' is not found' %(self.fname))
+                self.logger.error('file \'%s\' is not found' %(self.fname))
                 raise OSError
 
             except ValueError as err:
-                print('data file has wrong data format')
+                self.logger.error('data file has wrong data format')
                 raise ValueError
         
     def extract_pop(self):
 
         try:
-            if not self.xy['x']:
+            if len(self.xy['x'])==0:
                 self.extract_xy()
             #check_data_format(data)
             x = self.xy['x']
@@ -187,6 +214,7 @@ class SideBandMeasurement():
         
 
     def eval_parity(self):
+        self.logger.debug(f'Evaluate parity when fitting sb {self.fname}')
         try:
             res = self.extract_pop()
             self.weight_fit = res['weight fit']
@@ -198,7 +226,7 @@ class SideBandMeasurement():
                     self.parity += j*(-1)
             return self.parity
         except Exception as err:
-            print(err)
+            self.logger.exception(err)
             self.log_err(err)
         #use map and filter to do it in a better way???
 
