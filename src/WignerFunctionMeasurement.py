@@ -56,11 +56,11 @@ def check_structure(struct, conf):
 class WignerFunc_Measurement():
     def __init__(self,fpath) -> None:
         self.sb_list={} #dictionary that stores sb measurement
-     
+        self.logger = logging.getLogger(__name__)
         self.set_path(fpath)
         self.list_all_files()
 
-        self.logger = logging.getLogger(__name__)
+        
 
     def set_path(self,fpath) -> None:
         try:
@@ -141,31 +141,25 @@ class SideBandMeasurement():
     def set_Omega(self,omega):
         try:
             self.Omega_0 = float(omega)
-        except ValueError:
-            print('Rabi freq must a nummber')
-            raise ValueError
+        except ValueError as error:
+            self.logger.error(f'Rabi freq must a nummber {error}')
+            raise
 
     def set_gamma(self,gamma):
         try:
             self.gamma = float(gamma)
-        except ValueError:
-            print('gamma must a nummber')
-            raise ValueError        
+        except ValueError as error:
+            self.logger.error(f'gamma must a nummber {error}')
+            raise
 
 
     def set_weight(self,weight) -> None:
         self.logger.debug(f'Set weight when fitting sb {self.fname}')
         try:
             self.weight = [float(i) for i in weight]
-        except TypeError as err:
-            self.log_err('Set weight error')
-            raise TypeError
-
-        except ValueError as err:
-            self.log_err('Set weight error')
-            raise ValueError
-
-        return None
+        except (TypeError,ValueError) as err:
+            self.logger.error(f'Set weight error')
+            raise 
 
     def check_file_exist(self):
         try:
