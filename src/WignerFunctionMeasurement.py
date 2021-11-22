@@ -1,5 +1,6 @@
 import os
 from os.path import join, isfile
+from shutil import Error
 from sys import exec_prefix
 import numpy as np
 import fit
@@ -8,7 +9,7 @@ from tabulate import tabulate
 import logging
 
 np.seterr(all='raise')
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.DEBUG)
 class DataFormatError(Exception):
     pass
 
@@ -72,17 +73,29 @@ class WignerFunc_Measurement():
         
 
     def list_all_files(self):
+        print('Scanning the directory\n')
         self.files = [f for f in os.listdir(self.fpath) if isfile(join(self.fpath, f)) and os.path.splitext(join(self.fpath,f))[1] in ['','.dat'] ]
         self.fullpath_files = sorted( [join(self.fpath,f)  for f in os.listdir(self.fpath) if isfile(join(self.fpath, f)) and os.path.splitext(join(self.fpath,f))[1]=='' ] )
+        
         if self.files == []:
             self.logger.warning('The directory is empty')
         return self.files
 
     def setup_sbs(self):
-        for id, fname in enumerate(self.fullpath_files):
-            sbs = SideBandMeasurement(fname,raw = False)
-            sbs.eval_parity()
-            self.sb_list[str(id)] = sbs
+        print('Validating files')
+        cnt=0
+        for fname in self.fullpath_files:
+            try:
+                sbs = SideBandMeasurement(fname,raw = False)
+                
+                self.sb_list[str(cnt)] = sbs
+                cnt += 1
+            except Exception as err:
+                pass
+            else:
+                sbs.eval_parity()
+                
+        print(f'Discovered {cnt} valid files')
         
 
     def get_files(self):
@@ -99,15 +112,15 @@ class WignerFunc_Measurement():
         Refit a sideband measurement using new weights, omega and gamma.
         '''
         if (id >= len(self.sb_list.keys()) ):
-            print('id is out of range')
+            self.logger.warning('id is out of range')
             return
         else:
             sb_target = self.sb_list[str(id)]
+            sb_target.reset_log_err()
             print(f'Refitting Sideband measurement {sb_target.fname}')
             if omega!= None:
                 sb_target.set_Omega(omega)
             if len(weights) != 0:
-                self.logger.debug('fit with new weights')
                 sb_target.set_weight(weights)
             if gamma!= None:
                 sb_target.set_gamma(gamma)
@@ -120,7 +133,6 @@ class WignerFunc_Measurement():
 class SideBandMeasurement():
     def __init__(self,fname,raw = False ) -> None:
         self.fname = fname
-        self.check_file_exist()
         self.xy = dict((el,[]) for el in ['x','y','yerr'])
         self.plot = None
         self.parity = None
@@ -131,6 +143,23 @@ class SideBandMeasurement():
         self.offset = 0.0
         self.err_log=[]
         self.logger= logging.getLogger(__name__)
+
+        #verify if the data file is valid
+        try:
+            np.genfromtxt(self.fname)
+        except IOError as err:
+            #dont raise IO error here, just log it and move on to the next file.
+            self.logger.error('file \'%s\' is not found' %(self.fname) )
+            raise
+
+        try: 
+            self.extract_xy() 
+        except ValueError as err:
+            #dont raise here, just log it and move on to the next file.
+            self.logger.error(err)
+            raise
+
+
 
     def log_err(self,errors):
         self.err_log.append(errors)
@@ -161,12 +190,6 @@ class SideBandMeasurement():
             self.logger.error(f'Set weight error')
             raise 
 
-    def check_file_exist(self):
-        try:
-            np.genfromtxt(self.fname)
-        except OSError as err:
-            print('file \'%s\' is not found' %(self.fname))
-            raise OSError
 
     def extract_xy(self):
         '''
@@ -176,41 +199,41 @@ class SideBandMeasurement():
             try:
                 (self.xy['x'], self.xy['y'], self.xy['yerr'],_,_) = simple_read_data.get_x_y(self.fname)
             except Exception as err:
-                self.log_err('Extract_data err')
+                raise
         else:
             try:
                 self.xy['x'], self.xy['y'], self.xy['yerr'] = tuple(np.genfromtxt(self.fname))
-
-            except OSError as err:
-                self.logger.error('file \'%s\' is not found' %(self.fname))
-                raise OSError
-
             except ValueError as err:
-                self.logger.error('data file has wrong data format')
-                raise ValueError
+                raise ValueError(f'{self.fname} has wrong data format')
         
     def extract_pop(self):
 
         try:
-            if len(self.xy['x'])==0:
-                self.extract_xy()
-            #check_data_format(data)
-            x = self.xy['x']
-            y = self.xy['y']
-            yerr = self.xy['yerr']
-            self.fit_res = fit.fit_sum_multi_sine_offset(x, y, yerr, self.weight, self.Omega_0, self.gamma, offset = self.offset, rsb=False\
-                ,gamma_fixed=False,customized_bound_population=None)
-            return self.fit_res
+            self.fit_res = fit.fit_sum_multi_sine_offset(self.xy['x'], self.xy['y'], self.xy['yerr'], self.weight, self.Omega_0, self.gamma, offset = self.offset, rsb=False\
+        ,gamma_fixed=False,customized_bound_population=None,debug=False)
+        except FloatingPointError as err:
+            self.logger.warning('There is a measurement with zero sigma')
+            self.log_err('zero sigma')
+        
         except Exception as err:
-            print(err)
-            raise err
+            self.log_err('unexpected error in fitting')
+            #raise RuntimeError('Could not fit')
 
+        else:
+            redchi = self.fit_res['reduced_chi square']
+            if (redchi>10 or redchi<0):
+                self.logger.warning(f'Could not fit well')
+                self.log_err(f'Could not fit well, redchi = {redchi}')
+            return self.fit_res
+
+        
         
 
     def eval_parity(self):
-        self.logger.debug(f'Evaluate parity when fitting sb {self.fname}')
-        try:
-            res = self.extract_pop()
+        self.logger.debug(f'Evaluate parity of {self.fname}')
+
+        res = self.extract_pop()
+        if res!= None:
             self.weight_fit = res['weight fit']
             self.parity = 0 
             for i,j in enumerate(self.weight_fit):
@@ -219,9 +242,6 @@ class SideBandMeasurement():
                 else:
                     self.parity += j*(-1)
             return self.parity
-        except Exception as err:
-            self.logger.exception(err)
-            self.log_err(err)
         #use map and filter to do it in a better way???
 
     def plotxy(self):
