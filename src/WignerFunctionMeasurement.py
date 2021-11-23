@@ -64,6 +64,8 @@ class WignerFunc_Measurement():
         self.debug = debug
         if debug == True:
             self.logger.setLevel(logging.DEBUG)
+        else:
+            self.logger.setLevel(logging.ERROR)
 
 
     def set_path(self,fpath) -> None:
@@ -152,6 +154,8 @@ class SideBandMeasurement():
         self.logger= logging.getLogger(__name__)
         if debug == True:
             self.logger.setLevel(logging.DEBUG)
+        else:
+            self.logger.setLevel(logging.ERROR)
 
         #extract folder name and fname only
         (self.folder, self.short_fname) = self.fname.split("/")[-2:]
