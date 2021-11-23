@@ -9,7 +9,6 @@ from tabulate import tabulate
 import logging
 
 np.seterr(all='raise')
-logging.basicConfig(level=logging.DEBUG)
 class DataFormatError(Exception):
     pass
 
@@ -55,13 +54,17 @@ def check_structure(struct, conf):
 
 
 class WignerFunc_Measurement():
-    def __init__(self,fpath) -> None:
+    def __init__(self,fpath,debug=False) -> None:
         self.sb_list={} #dictionary that stores sb measurement
-        self.logger = logging.getLogger(__name__)
+        
         self.set_path(fpath)
         self.list_all_files()
 
-        
+        self.logger = logging.getLogger(__name__)
+        self.debug = debug
+        if debug == True:
+            self.logger.setLevel(logging.DEBUG)
+
 
     def set_path(self,fpath) -> None:
         try:
@@ -73,20 +76,22 @@ class WignerFunc_Measurement():
         
 
     def list_all_files(self):
-        print('Scanning the directory\n')
+        print('Scanning the directory')
         self.files = [f for f in os.listdir(self.fpath) if isfile(join(self.fpath, f)) and os.path.splitext(join(self.fpath,f))[1] in ['','.dat'] ]
         self.fullpath_files = sorted( [join(self.fpath,f)  for f in os.listdir(self.fpath) if isfile(join(self.fpath, f)) and os.path.splitext(join(self.fpath,f))[1]=='' ] )
         
         if self.files == []:
             self.logger.warning('The directory is empty')
+        else:
+            print(f'Discovered {len(self.files)} files in the directory')
         return self.files
 
     def setup_sbs(self):
-        print('Validating files')
+        print(f'Validating files')
         cnt=0
         for fname in self.fullpath_files:
             try:
-                sbs = SideBandMeasurement(fname,raw = False)
+                sbs = SideBandMeasurement(fname,raw = False,debug= self.debug)
                 
                 self.sb_list[str(cnt)] = sbs
                 cnt += 1
@@ -95,7 +100,7 @@ class WignerFunc_Measurement():
             else:
                 sbs.eval_parity()
                 
-        print(f'Discovered {cnt} valid files')
+        print(f'Discovered {cnt} valid files with right data format\n')
         
 
     def get_files(self):
@@ -103,9 +108,9 @@ class WignerFunc_Measurement():
 
     def print_report(self):
         print('Report summary \n')
-        t=[[key,sb.fname, sb.parity, sb.err_log] for key,sb in self.sb_list.items()]
+        t=[[key,sb.folder, sb.short_fname, sb.parity, sb.err_log] for key,sb in self.sb_list.items()]
 
-        print(tabulate(t, headers=['id', 'filepath', 'parity','Errors']))
+        print(tabulate(t, headers=['id', 'folder','filename', 'parity','Errors']))
 
     def refit(self,id,weights=[],omega=None,gamma=None):
         '''
@@ -131,7 +136,7 @@ class WignerFunc_Measurement():
         pass
 
 class SideBandMeasurement():
-    def __init__(self,fname,raw = False ) -> None:
+    def __init__(self,fname,raw = False, debug = False ) -> None:
         self.fname = fname
         self.xy = dict((el,[]) for el in ['x','y','yerr'])
         self.plot = None
@@ -141,22 +146,27 @@ class SideBandMeasurement():
         self.Omega_0 = 0.05
         self.gamma = 7e-4
         self.offset = 0.0
+
+        #logging 
         self.err_log=[]
         self.logger= logging.getLogger(__name__)
+        if debug == True:
+            self.logger.setLevel(logging.DEBUG)
+
+        #extract folder name and fname only
+        (self.folder, self.short_fname) = self.fname.split("/")[-2:]
 
         #verify if the data file is valid
         try:
             np.genfromtxt(self.fname)
         except IOError as err:
-            #dont raise IO error here, just log it and move on to the next file.
-            self.logger.error('file \'%s\' is not found' %(self.fname) )
+            #self.logger.exception('file \'%s\' is not found' %(self.fname) )
             raise
 
         try: 
             self.extract_xy() 
         except ValueError as err:
-            #dont raise here, just log it and move on to the next file.
-            self.logger.error(err)
+            #self.logger.exception(err)
             raise
 
 
@@ -204,7 +214,7 @@ class SideBandMeasurement():
             try:
                 self.xy['x'], self.xy['y'], self.xy['yerr'] = tuple(np.genfromtxt(self.fname))
             except ValueError as err:
-                raise ValueError(f'{self.fname} has wrong data format')
+                raise ValueError(f'{self.short_fname} has wrong data format')
         
     def extract_pop(self):
 
@@ -212,7 +222,7 @@ class SideBandMeasurement():
             self.fit_res = fit.fit_sum_multi_sine_offset(self.xy['x'], self.xy['y'], self.xy['yerr'], self.weight, self.Omega_0, self.gamma, offset = self.offset, rsb=False\
         ,gamma_fixed=False,customized_bound_population=None,debug=False)
         except FloatingPointError as err:
-            self.logger.warning('There is a measurement with zero sigma')
+            #self.logger.warning('There is a measurement with zero uncertainty')
             self.log_err('zero sigma')
         
         except Exception as err:
@@ -222,8 +232,8 @@ class SideBandMeasurement():
         else:
             redchi = self.fit_res['reduced_chi square']
             if (redchi>10 or redchi<0):
-                self.logger.warning(f'Could not fit well')
-                self.log_err(f'Could not fit well, redchi = {redchi}')
+                #self.logger.warning(f'Could not fit well')
+                self.log_err(f'Could not fit well, redchi = {round(redchi,2)}')
             return self.fit_res
 
         
