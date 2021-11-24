@@ -60,13 +60,18 @@ class WignerFunc_Measurement():
         self.set_path(fpath)
         self.list_all_files()
 
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger('WFM')
         self.debug = debug
         if debug == True:
             self.logger.setLevel(logging.DEBUG)
         else:
             self.logger.setLevel(logging.ERROR)
 
+        #add stream handler and formatter
+        c_handler = logging.StreamHandler()
+        c_format = logging.Formatter('WFM: %(message)s')
+        c_handler.setFormatter(c_format)
+        self.logger.addHandler(c_handler)
 
     def set_path(self,fpath) -> None:
         try:
@@ -149,9 +154,18 @@ class SideBandMeasurement():
         self.gamma = 7e-4
         self.offset = 0.0
 
-        #logging 
+        #internal logging 
         self.err_log=[]
-        self.logger= logging.getLogger(__name__)
+
+        #logging
+        self.logger= logging.getLogger(self.fname)
+        
+        #add stream handler and formatter
+        c_handler = logging.StreamHandler()
+        c_format = logging.Formatter('SBM: %(message)s')
+        c_handler.setFormatter(c_format)
+        self.logger.addHandler(c_handler)
+
         if debug == True:
             self.logger.setLevel(logging.DEBUG)
         else:
